@@ -16,6 +16,7 @@ type sockjsVessel struct {
 	idGenerator idGenerator
 }
 
+// NewSockJSVessel returns a new Vessel which relies on SockJS as the underlying transport.
 func NewSockJSVessel(uri string) Vessel {
 	return &sockjsVessel{
 		uri:         uri,
@@ -26,15 +27,18 @@ func NewSockJSVessel(uri string) Vessel {
 	}
 }
 
+// AddChannel registers the Channel handler with the specified name.
 func (v *sockjsVessel) AddChannel(name string, channel Channel) {
 	v.channels[name] = channel
 }
 
+// Start will start the server on the given port.
 func (v *sockjsVessel) Start(portStr string) error {
 	handler := sockjs.NewHandler(v.uri, sockjs.DefaultOptions, v.handler())
 	return http.ListenAndServe(portStr, handler)
 }
 
+// Broadcast sends the specified message on the given channel to all connected clients.
 func (s *sockjsVessel) Broadcast(channel string, msg string) {
 	m := &message{
 		ID:      s.idGenerator.generate(),
@@ -95,7 +99,9 @@ func (s *sockjsVessel) handler() func(sockjs.Session) {
 
 }
 
-func (s *sockjsVessel) listenForResults(id, channel string, c <-chan string, done <-chan bool, session sockjs.Session) {
+func (s *sockjsVessel) listenForResults(id, channel string, c <-chan string,
+	done <-chan bool, session sockjs.Session) {
+
 	for {
 		select {
 		case <-done:

@@ -15,8 +15,13 @@ type Channel func(string, chan<- string, chan<- bool)
 // Vessel coordinates communication between clients and server. It's responsible for managing
 // Channels and processing incoming and outgoing messages.
 type Vessel interface {
+	// AddChannel registers the Channel handler with the specified name.
 	AddChannel(string, Channel)
+
+	// Start will start the server on the given port.
 	Start(string) error
+
+	// Broadcast sends the specified message on the given channel to all connected clients.
 	Broadcast(string, string)
 }
 
