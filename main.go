@@ -22,5 +22,5 @@ func main() {
 		}
 	}()
 
-	vessel.Start(":8081")
+	vessel.Start(":8081", ":8082")
 }

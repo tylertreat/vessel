@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/gorilla/mux"
 	"github.com/igm/sockjs-go/sockjs"
 )
 
@@ -12,19 +13,24 @@ type sockjsVessel struct {
 	uri         string
 	sessions    []sockjs.Session
 	channels    map[string]Channel
-	marshaler   marshaler
+	marshaler   Marshaler
 	idGenerator idGenerator
+	httpHandler *httpHandler
 }
 
 // NewSockJSVessel returns a new Vessel which relies on SockJS as the underlying transport.
 func NewSockJSVessel(uri string) Vessel {
-	return &sockjsVessel{
+	marshaler := &jsonMarshaler{}
+	vessel := &sockjsVessel{
 		uri:         uri,
 		channels:    map[string]Channel{},
 		sessions:    []sockjs.Session{},
-		marshaler:   &jsonMarshaler{},
+		marshaler:   marshaler,
 		idGenerator: &uuidGenerator{},
 	}
+	httpHandler := &httpHandler{vessel, map[string][]*message{}, map[string]*result{}}
+	vessel.httpHandler = httpHandler
+	return vessel
 }
 
 // AddChannel registers the Channel handler with the specified name.
@@ -33,9 +39,20 @@ func (v *sockjsVessel) AddChannel(name string, channel Channel) {
 }
 
 // Start will start the server on the given port.
-func (v *sockjsVessel) Start(portStr string) error {
-	handler := sockjs.NewHandler(v.uri, sockjs.DefaultOptions, v.handler())
-	return http.ListenAndServe(portStr, handler)
+func (v *sockjsVessel) Start(sockPortStr, httpPortStr string) error {
+	sockjsHandler := sockjs.NewHandler(v.uri, sockjs.DefaultOptions, v.handler())
+	r := mux.NewRouter()
+	r.HandleFunc("/_vessel", v.httpHandler.sendHandler).Methods("POST")
+	r.HandleFunc("/_vessel/message/{id}", v.httpHandler.pollHandler).Methods("GET")
+	http.Handle("/", r)
+	go func() {
+		http.ListenAndServe(httpPortStr, r)
+	}()
+	return http.ListenAndServe(sockPortStr, sockjsHandler)
+}
+
+func (v *sockjsVessel) Marshaler() Marshaler {
+	return v.marshaler
 }
 
 // Broadcast sends the specified message on the given channel to all connected clients.
@@ -47,7 +64,7 @@ func (s *sockjsVessel) Broadcast(channel string, msg string) {
 	}
 
 	for _, session := range s.sessions {
-		if send, err := s.marshaler.marshal(m); err != nil {
+		if send, err := s.marshaler.Marshal(m); err != nil {
 			log.Println(err)
 		} else {
 			sendStr := string(send)
@@ -68,24 +85,15 @@ func (s *sockjsVessel) handler() func(sockjs.Session) {
 				break
 			}
 
-			log.Println("Recv", msg)
-
-			recvMsg, err := s.marshaler.unmarshal([]byte(msg))
+			// Process message and invoke handler for it.
+			recvMsg, results, done, err := s.Recv([]byte(msg))
 			if err != nil {
 				log.Println(err)
 				continue
 			}
 
-			channelHandler, ok := s.channels[recvMsg.Channel]
-			if !ok {
-				log.Println(fmt.Sprintf("No channel registered for %s", recvMsg.Channel))
-				continue
-			}
-
-			result := make(chan string)
-			done := make(chan bool)
-			go s.listenForResults(recvMsg.ID, recvMsg.Channel, result, done, session)
-			channelHandler(recvMsg.Body, result, done)
+			// Begin dispatching results produced by the handler.
+			go s.dispatchResponses(recvMsg.ID, recvMsg.Channel, results, done, session)
 		}
 
 		// Remove session from Vessel.
@@ -99,7 +107,25 @@ func (s *sockjsVessel) handler() func(sockjs.Session) {
 
 }
 
-func (s *sockjsVessel) listenForResults(id, channel string, c <-chan string,
+func (s *sockjsVessel) Recv(msg []byte) (*message, <-chan string, <-chan bool, error) {
+	log.Println("Recv", msg)
+	recvMsg, err := s.marshaler.Unmarshal(msg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	channelHandler, ok := s.channels[recvMsg.Channel]
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("No channel registered for %s", recvMsg.Channel)
+	}
+
+	result := make(chan string, 100)
+	done := make(chan bool, 1)
+	channelHandler(recvMsg.Body, result, done)
+	return recvMsg, result, done, nil
+}
+
+func (s *sockjsVessel) dispatchResponses(id, channel string, c <-chan string,
 	done <-chan bool, session sockjs.Session) {
 
 	for {
@@ -113,7 +139,7 @@ func (s *sockjsVessel) listenForResults(id, channel string, c <-chan string,
 				Body:    result,
 			}
 
-			if send, err := s.marshaler.marshal(sendMsg); err != nil {
+			if send, err := s.marshaler.Marshal(sendMsg); err != nil {
 				log.Println(err)
 			} else {
 				sendStr := string(send)
