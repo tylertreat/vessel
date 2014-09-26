@@ -44,9 +44,9 @@ func (v *sockjsVessel) Start(sockPortStr, httpPortStr string) error {
 	r := mux.NewRouter()
 	r.HandleFunc("/_vessel", v.httpHandler.sendHandler).Methods("POST")
 	r.HandleFunc("/_vessel/message/{id}", v.httpHandler.pollHandler).Methods("GET")
-	http.Handle("/", r)
+	http.Handle("/", &httpServer{r})
 	go func() {
-		http.ListenAndServe(httpPortStr, r)
+		http.ListenAndServe(httpPortStr, nil)
 	}()
 	return http.ListenAndServe(sockPortStr, sockjsHandler)
 }
@@ -63,6 +63,7 @@ func (s *sockjsVessel) Broadcast(channel string, msg string) {
 		Body:    msg,
 	}
 
+	// TODO: these messages need to be made visible to HTTP pollers.
 	for _, session := range s.sessions {
 		if send, err := s.marshaler.Marshal(m); err != nil {
 			log.Println(err)

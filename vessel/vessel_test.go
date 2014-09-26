@@ -176,7 +176,9 @@ func TestSendHandler(t *testing.T) {
 
 	mockVessel.Mock.AssertExpectations(t)
 	assert.Equal(http.StatusAccepted, w.Code)
-	assert.Equal("/_vessel/message/abc", w.Body.String())
+	assert.Equal(
+		`{"channel":"foo","id":"abc","responses":"http://example.com/_vessel/message/abc"}`,
+		w.Body.String())
 	result := handler.results["abc"]
 	if assert.NotNil(result) {
 		assert.False(result.Done)
