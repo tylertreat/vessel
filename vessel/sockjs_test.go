@@ -41,11 +41,13 @@ func (m *mockIDGenerator) generate() string {
 	return args.String(0)
 }
 
-func newChannel(called *bool) Channel {
+func newChannel(t *testing.T, expected bool) Channel {
 	return func(name string, result chan<- string, done chan<- bool) {
-		*called = true
 		result <- "foo"
 		done <- true
+		if !expected {
+			t.Errorf("Unexpected call to channel")
+		}
 	}
 }
 
@@ -55,13 +57,11 @@ func TestHandlerRecvError(t *testing.T) {
 	session := new(mockSession)
 	session.On("Recv").Return("", fmt.Errorf("error"))
 	vessel := NewSockJSVessel("http://localhost.com/foo")
-	called := false
-	vessel.AddChannel("foo", newChannel(&called))
+	vessel.AddChannel("foo", newChannel(t, false))
 	handler := vessel.(*sockjsVessel).handler()
 
 	handler(session)
 
-	assert.False(called)
 	assert.Equal(0, len(vessel.(*sockjsVessel).sessions))
 	session.Mock.AssertExpectations(t)
 }
@@ -73,13 +73,11 @@ func TestHandlerBadMessage(t *testing.T) {
 	session.On("Recv").Return(`{"foo": "bar"`, nil).Once()
 	session.On("Recv").Return("", fmt.Errorf("error")).Once()
 	vessel := NewSockJSVessel("http://localhost.com/foo")
-	called := false
-	vessel.AddChannel("foo", newChannel(&called))
+	vessel.AddChannel("foo", newChannel(t, false))
 	handler := vessel.(*sockjsVessel).handler()
 
 	handler(session)
 
-	assert.False(called)
 	assert.Equal(0, len(vessel.(*sockjsVessel).sessions))
 	session.Mock.AssertExpectations(t)
 }
@@ -92,15 +90,12 @@ func TestHandlerChannel(t *testing.T) {
 	session.On("Recv").Return("", fmt.Errorf("error")).Once()
 	session.On("Send", `{"id":"abc","channel":"foo","body":"foo"}`).Return(nil)
 	vessel := NewSockJSVessel("http://localhost.com/foo")
-	called := false
-	vessel.AddChannel("foo", newChannel(&called))
+	vessel.AddChannel("foo", newChannel(t, true))
 	handler := vessel.(*sockjsVessel).handler()
 
 	handler(session)
 
-	assert.True(called)
 	assert.Equal(0, len(vessel.(*sockjsVessel).sessions))
-	session.Mock.AssertExpectations(t)
 }
 
 // Ensures that Broadcast sends on all sessions.

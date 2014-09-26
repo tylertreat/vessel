@@ -24,7 +24,7 @@ type Vessel interface {
 	// Start will start the server on the given ports.
 	Start(string, string) error
 
-	Recv([]byte) (*message, <-chan string, <-chan bool, error)
+	Recv(*message) (<-chan string, <-chan bool, error)
 
 	// Broadcast sends the specified message on the given channel to all connected clients.
 	Broadcast(string, string)
@@ -97,21 +97,29 @@ type result struct {
 
 type httpHandler struct {
 	Vessel
-	messages map[string][]*message
-	results  map[string]*result
+	results   map[string]*result
+	marshaler Marshaler
 }
 
 func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(r.Body)
 
-	msg, results, done, err := h.Recv(buf.Bytes())
+	msg, err := h.marshaler.Unmarshal(buf.Bytes())
 	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
 	}
 
-	h.messages[msg.ID] = []*message{}
+	results, done, err := h.Recv(msg)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	// TODO: Look into pluggable persistence.
 	h.results[msg.ID] = &result{
 		Done:    false,
 		Results: []*message{},
@@ -119,35 +127,38 @@ func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
 
 	go h.dispatch(msg.ID, msg.Channel, results, done)
 
+	w.WriteHeader(http.StatusAccepted)
 	w.Write([]byte("/_vessel/message/" + msg.ID))
 }
 
 func (h *httpHandler) pollHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
-
 	result, ok := h.results[id]
 	if !ok {
-		w.Write([]byte("no message"))
+		w.WriteHeader(http.StatusNotFound)
+		return
 	}
 
 	resp, err := json.Marshal(result)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	w.Write(resp)
 }
 
 func (h *httpHandler) dispatch(id, channel string, results <-chan string, done <-chan bool) {
+	r := h.results[id]
 	for {
 		select {
 		case <-done:
-			h.results[id].Done = true
-			return
+			r.Done = true
 		case result := <-results:
-			h.results[id].Results = append(h.results[id].Results, &message{
+			r.Results = append(r.Results, &message{
 				ID:      id,
 				Channel: channel,
 				Body:    result,

@@ -28,7 +28,7 @@ func NewSockJSVessel(uri string) Vessel {
 		marshaler:   marshaler,
 		idGenerator: &uuidGenerator{},
 	}
-	httpHandler := &httpHandler{vessel, map[string][]*message{}, map[string]*result{}}
+	httpHandler := &httpHandler{vessel, map[string]*result{}, &jsonMarshaler{}}
 	vessel.httpHandler = httpHandler
 	return vessel
 }
@@ -85,8 +85,14 @@ func (s *sockjsVessel) handler() func(sockjs.Session) {
 				break
 			}
 
+			recvMsg, err := s.marshaler.Unmarshal([]byte(msg))
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
 			// Process message and invoke handler for it.
-			recvMsg, results, done, err := s.Recv([]byte(msg))
+			results, done, err := s.Recv(recvMsg)
 			if err != nil {
 				log.Println(err)
 				continue
@@ -107,22 +113,18 @@ func (s *sockjsVessel) handler() func(sockjs.Session) {
 
 }
 
-func (s *sockjsVessel) Recv(msg []byte) (*message, <-chan string, <-chan bool, error) {
-	log.Println("Recv", msg)
-	recvMsg, err := s.marshaler.Unmarshal(msg)
-	if err != nil {
-		return nil, nil, nil, err
-	}
+func (s *sockjsVessel) Recv(msg *message) (<-chan string, <-chan bool, error) {
+	log.Printf("Recv %s:%s:%s", msg.ID, msg.Channel, msg.Body)
 
-	channelHandler, ok := s.channels[recvMsg.Channel]
+	channelHandler, ok := s.channels[msg.Channel]
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("No channel registered for %s", recvMsg.Channel)
+		return nil, nil, fmt.Errorf("No channel registered for %s", msg.Channel)
 	}
 
-	result := make(chan string, 100)
+	result := make(chan string, 1)
 	done := make(chan bool, 1)
-	channelHandler(recvMsg.Body, result, done)
-	return recvMsg, result, done, nil
+	go channelHandler(msg.Body, result, done)
+	return result, done, nil
 }
 
 func (s *sockjsVessel) dispatchResponses(id, channel string, c <-chan string,
@@ -138,7 +140,6 @@ func (s *sockjsVessel) dispatchResponses(id, channel string, c <-chan string,
 				Channel: channel,
 				Body:    result,
 			}
-
 			if send, err := s.marshaler.Marshal(sendMsg); err != nil {
 				log.Println(err)
 			} else {
