@@ -29,6 +29,11 @@ func (m *mockVessel) Broadcast(channel string, msg string) {
 	m.Mock.Called(channel, msg)
 }
 
+func (m *mockVessel) Persister() Persister {
+	args := m.Mock.Called()
+	return args.Get(0).(Persister)
+}
+
 func (m *mockVessel) URI() string {
 	args := m.Mock.Called()
 	return args.String(0)

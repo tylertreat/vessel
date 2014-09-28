@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -35,19 +36,17 @@ type result struct {
 
 type httpHandler struct {
 	Vessel
-	results   map[string]*result
 	marshaler *jsonMarshaler
 }
 
 func newHTTPHandler(vessel Vessel) *httpHandler {
 	return &httpHandler{
 		vessel,
-		map[string]*result{},
 		&jsonMarshaler{},
 	}
 }
 
-func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
+func (h *httpHandler) send(w http.ResponseWriter, r *http.Request) {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(r.Body)
 
@@ -65,11 +64,11 @@ func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Look into pluggable persistence.
-	h.results[msg.ID] = &result{
+	result := &result{
 		Done:      false,
 		Responses: []*message{},
 	}
+	h.Persister().SaveResult(msg.ID, result)
 
 	go h.dispatch(msg.ID, msg.Channel, results, done)
 
@@ -96,11 +95,11 @@ func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
-func (h *httpHandler) pollHandler(w http.ResponseWriter, r *http.Request) {
+func (h *httpHandler) pollResponses(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
-	result, ok := h.results[id]
-	if !ok {
+	result, err := h.Persister().GetResult(id)
+	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -116,18 +115,47 @@ func (h *httpHandler) pollHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+func (h *httpHandler) pollSubscription(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	channel := vars["channel"]
+	messages, err := h.Persister().GetMessages(channel)
+	if err != nil {
+		fmt.Println(err)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	resp, err := json.Marshal(messages)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
+}
+
 func (h *httpHandler) dispatch(id, channel string, results <-chan string, done <-chan bool) {
-	r := h.results[id]
+	persister := h.Persister()
+	r, err := persister.GetResult(id)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	for {
 		select {
 		case <-done:
 			r.Done = true
+			persister.SaveResult(id, r)
 		case result := <-results:
 			r.Responses = append(r.Responses, &message{
 				ID:      id,
 				Channel: channel,
 				Body:    result,
 			})
+			persister.SaveResult(id, r)
 		}
 	}
 }
