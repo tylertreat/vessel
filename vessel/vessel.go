@@ -31,6 +31,9 @@ type Vessel interface {
 
 	// Persister returns the Persister for this Vessel.
 	Persister() Persister
+
+	// URI returns the registered URI for this Vessel.
+	URI() string
 }
 
 type Persister interface {

@@ -13,33 +13,6 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-type mockVessel struct {
-	mock.Mock
-}
-
-func (m *mockVessel) AddChannel(name string, channel Channel) {
-	m.Mock.Called(name, channel)
-}
-
-func (m *mockVessel) Start(sockPortStr, httpPortStr string) error {
-	args := m.Mock.Called(sockPortStr, httpPortStr)
-	return args.Error(0)
-}
-
-func (m *mockVessel) Recv(msg *message) (<-chan string, <-chan bool, error) {
-	args := m.Mock.Called(msg)
-	return args.Get(0).(<-chan string), args.Get(1).(<-chan bool), args.Error(2)
-}
-
-func (m *mockVessel) Broadcast(channel string, msg string) {
-	m.Mock.Called(channel, msg)
-}
-
-func (m *mockVessel) Persister() Persister {
-	args := m.Mock.Called()
-	return args.Get(0).(Persister)
-}
-
 type mockPersister struct {
 	mock.Mock
 }
@@ -89,7 +62,7 @@ func TestSendBadRequest(t *testing.T) {
 	}
 	jsonPayload, _ := json.Marshal(payload)
 	reader := bytes.NewReader(jsonPayload)
-	req, _ := http.NewRequest("POST", "http://example.com/_vessel", reader)
+	req, _ := http.NewRequest("POST", "http://example.com/vessel", reader)
 
 	handler.send(w, req)
 
@@ -110,7 +83,7 @@ func TestSendRecvFail(t *testing.T) {
 	}
 	jsonPayload, _ := json.Marshal(payload)
 	reader := bytes.NewReader(jsonPayload)
-	req, _ := http.NewRequest("POST", "http://example.com/_vessel", reader)
+	req, _ := http.NewRequest("POST", "http://example.com/vessel", reader)
 	mockVessel.On("Recv", &message{ID: "abc", Channel: "foo", Body: "bar"}).
 		Return(make(<-chan string), make(<-chan bool), fmt.Errorf("error"))
 
@@ -135,20 +108,21 @@ func TestSend(t *testing.T) {
 	}
 	jsonPayload, _ := json.Marshal(payload)
 	reader := bytes.NewReader(jsonPayload)
-	req, _ := http.NewRequest("POST", "http://example.com/_vessel", reader)
+	req, _ := http.NewRequest("POST", "http://example.com/vessel", reader)
 	mockVessel.On("Recv", &message{ID: "abc", Channel: "foo", Body: "bar"}).
 		Return(make(<-chan string), make(<-chan bool), nil)
 	mockVessel.On("Persister").Return(mockPersister)
 	result := &result{Done: false, Responses: []*message{}}
 	mockPersister.On("SaveResult", "abc", result).Return(nil)
 	mockPersister.On("GetResult", "abc").Return(nil, fmt.Errorf("error"))
+	mockVessel.On("URI").Return("/vessel")
 
 	handler.send(w, req)
 
 	mockVessel.Mock.AssertExpectations(t)
 	assert.Equal(http.StatusAccepted, w.Code)
 	assert.Equal(
-		`{"channel":"foo","id":"abc","responses":"http://example.com/_vessel/message/abc"}`,
+		`{"channel":"foo","id":"abc","responses":"http://example.com/vessel/message/abc"}`,
 		w.Body.String())
 }
 
@@ -159,7 +133,7 @@ func TestPollResponsesNoMessage(t *testing.T) {
 	mockPersister := new(mockPersister)
 	handler := newHTTPHandler(mockVessel)
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "http://example.com/_vessel/message/abc", nil)
+	req, _ := http.NewRequest("GET", "http://example.com/vessel/message/abc", nil)
 	r := router(handler.pollResponses)
 	mockVessel.On("Persister").Return(mockPersister)
 	mockPersister.On("GetResult", "abc").Return(nil, fmt.Errorf("no result"))
@@ -177,7 +151,7 @@ func TestPollHandler(t *testing.T) {
 	mockPersister := new(mockPersister)
 	handler := newHTTPHandler(mockVessel)
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "http://example.com/_vessel/message/abc", nil)
+	req, _ := http.NewRequest("GET", "http://example.com/vessel/message/abc", nil)
 	r := router(handler.pollResponses)
 	mockVessel.On("Persister").Return(mockPersister)
 	result := &result{
@@ -194,6 +168,6 @@ func TestPollHandler(t *testing.T) {
 
 func router(handler http.HandlerFunc) *mux.Router {
 	r := mux.NewRouter()
-	r.HandleFunc("/_vessel/message/{id}", handler)
+	r.HandleFunc("/vessel/message/{id}", handler)
 	return r
 }

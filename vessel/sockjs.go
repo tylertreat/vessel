@@ -47,9 +47,9 @@ func (v *sockjsVessel) Start(sockPortStr, httpPortStr string) error {
 
 	sockjsHandler := sockjs.NewHandler(v.uri, sockjs.DefaultOptions, v.handler())
 	r := mux.NewRouter()
-	r.HandleFunc("/_vessel", v.httpHandler.send).Methods("POST")
-	r.HandleFunc("/_vessel/message/{id}", v.httpHandler.pollResponses).Methods("GET")
-	r.HandleFunc("/_vessel/channel/{channel}", v.httpHandler.pollSubscription).Methods("GET")
+	r.HandleFunc(v.uri, v.httpHandler.send).Methods("POST")
+	r.HandleFunc(v.uri+"/message/{id}", v.httpHandler.pollResponses).Methods("GET")
+	r.HandleFunc(v.uri+"/channel/{channel}", v.httpHandler.pollSubscription).Methods("GET")
 	http.Handle("/", &httpServer{r})
 	go func() {
 		http.ListenAndServe(httpPortStr, nil)
@@ -57,8 +57,14 @@ func (v *sockjsVessel) Start(sockPortStr, httpPortStr string) error {
 	return http.ListenAndServe(sockPortStr, sockjsHandler)
 }
 
+// Persister returns the Persister for this Vessel.
 func (v *sockjsVessel) Persister() Persister {
 	return v.persister
+}
+
+// URI returns the registered URI for this Vessel.
+func (v *sockjsVessel) URI() string {
+	return v.uri
 }
 
 // Broadcast sends the specified message on the given channel to all connected clients.

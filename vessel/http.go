@@ -78,7 +78,7 @@ func (h *httpHandler) send(w http.ResponseWriter, r *http.Request) {
 		scheme = "http"
 	}
 
-	urlStr := fmt.Sprintf("%s://%s/_vessel/message/%s", scheme, r.Host, msg.ID)
+	urlStr := fmt.Sprintf("%s://%s%s/message/%s", scheme, r.Host, h.URI(), msg.ID)
 
 	payload := map[string]interface{}{
 		"id":        msg.ID,
