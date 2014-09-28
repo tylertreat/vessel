@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -35,14 +36,12 @@ type result struct {
 
 type httpHandler struct {
 	Vessel
-	results   map[string]*result
 	marshaler *jsonMarshaler
 }
 
 func newHTTPHandler(vessel Vessel) *httpHandler {
 	return &httpHandler{
 		vessel,
-		map[string]*result{},
 		&jsonMarshaler{},
 	}
 }
@@ -65,11 +64,11 @@ func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Look into pluggable persistence.
-	h.results[msg.ID] = &result{
+	result := &result{
 		Done:      false,
 		Responses: []*message{},
 	}
+	h.Persister().Persist(msg.ID, result)
 
 	go h.dispatch(msg.ID, msg.Channel, results, done)
 
@@ -99,10 +98,9 @@ func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
 func (h *httpHandler) pollHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
-	result, ok := h.results[id]
-	if !ok {
-		w.WriteHeader(http.StatusNotFound)
-		return
+	result, err := h.Persister().Get(id)
+	if err != nil {
+		panic(err)
 	}
 
 	resp, err := json.Marshal(result)
@@ -117,17 +115,25 @@ func (h *httpHandler) pollHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *httpHandler) dispatch(id, channel string, results <-chan string, done <-chan bool) {
-	r := h.results[id]
+	persister := h.Persister()
+	r, err := persister.Get(id)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	for {
 		select {
 		case <-done:
 			r.Done = true
+			persister.Persist(id, r)
 		case result := <-results:
 			r.Responses = append(r.Responses, &message{
 				ID:      id,
 				Channel: channel,
 				Body:    result,
 			})
+			persister.Persist(id, r)
 		}
 	}
 }

@@ -16,20 +16,26 @@ type sockjsVessel struct {
 	marshaler   marshaler
 	idGenerator idGenerator
 	httpHandler *httpHandler
+	persister   Persister
 }
 
 // NewSockJSVessel returns a new Vessel which relies on SockJS as the underlying transport.
-func NewSockJSVessel(uri string) Vessel {
+func NewSockJSVessel(uri string) (Vessel, error) {
+	persister, err := NewPersister()
+	if err != nil {
+		return nil, err
+	}
 	vessel := &sockjsVessel{
 		uri:         uri,
 		channels:    map[string]Channel{},
 		sessions:    []sockjs.Session{},
 		marshaler:   &jsonMarshaler{},
 		idGenerator: &uuidGenerator{},
+		persister:   persister,
 	}
 	httpHandler := newHTTPHandler(vessel)
 	vessel.httpHandler = httpHandler
-	return vessel
+	return vessel, nil
 }
 
 // AddChannel registers the Channel handler with the specified name.
@@ -48,6 +54,10 @@ func (v *sockjsVessel) Start(sockPortStr, httpPortStr string) error {
 		http.ListenAndServe(httpPortStr, nil)
 	}()
 	return http.ListenAndServe(sockPortStr, sockjsHandler)
+}
+
+func (v *sockjsVessel) Persister() Persister {
+	return v.persister
 }
 
 // Broadcast sends the specified message on the given channel to all connected clients.

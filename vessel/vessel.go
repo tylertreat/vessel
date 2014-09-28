@@ -28,6 +28,14 @@ type Vessel interface {
 
 	// Broadcast sends the specified message on the given channel to all connected clients.
 	Broadcast(string, string)
+
+	// Persister returns the Persister for this Vessel.
+	Persister() Persister
+}
+
+type Persister interface {
+	Persist(string, *result) error
+	Get(string) (*result, error)
 }
 
 type message struct {
