@@ -109,6 +109,9 @@ func (s *sockjsVessel) handler() func(sockjs.Session) {
 
 }
 
+// Recv will handle a message by invoking any registered Channel handler. It
+// returns channels for receiving responses and checking if the message handler
+// has completed.
 func (s *sockjsVessel) Recv(msg *message) (<-chan string, <-chan bool, error) {
 	log.Printf("Recv %s:%s:%s", msg.ID, msg.Channel, msg.Body)
 

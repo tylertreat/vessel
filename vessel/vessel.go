@@ -21,6 +21,9 @@ type Vessel interface {
 	// Start will start the server on the given ports.
 	Start(string, string) error
 
+	// Recv will handle a message by invoking any registered Channel handler.
+	// It returns channels for receiving responses and checking if the message
+	// handler has completed.
 	Recv(*message) (<-chan string, <-chan bool, error)
 
 	// Broadcast sends the specified message on the given channel to all connected clients.
