@@ -36,7 +36,15 @@ type result struct {
 type httpHandler struct {
 	Vessel
 	results   map[string]*result
-	marshaler marshaler
+	marshaler *jsonMarshaler
+}
+
+func newHTTPHandler(vessel Vessel) *httpHandler {
+	return &httpHandler{
+		vessel,
+		map[string]*result{},
+		&jsonMarshaler{},
+	}
 }
 
 func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {

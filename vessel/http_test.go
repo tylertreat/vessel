@@ -16,7 +16,7 @@ import (
 func TestSendHandlerBadRequest(t *testing.T) {
 	assert := assert.New(t)
 	mockVessel := new(mockVessel)
-	handler := &httpHandler{mockVessel, map[string]*result{}, &jsonMarshaler{}}
+	handler := newHTTPHandler(mockVessel)
 	w := httptest.NewRecorder()
 	payload := map[string]interface{}{
 		"channel": "foo",
@@ -36,7 +36,7 @@ func TestSendHandlerBadRequest(t *testing.T) {
 func TestSendHandlerRecvFail(t *testing.T) {
 	assert := assert.New(t)
 	mockVessel := new(mockVessel)
-	handler := &httpHandler{mockVessel, map[string]*result{}, &jsonMarshaler{}}
+	handler := newHTTPHandler(mockVessel)
 	w := httptest.NewRecorder()
 	payload := map[string]interface{}{
 		"id":      "abc",
@@ -60,7 +60,7 @@ func TestSendHandlerRecvFail(t *testing.T) {
 func TestSendHandler(t *testing.T) {
 	assert := assert.New(t)
 	mockVessel := new(mockVessel)
-	handler := &httpHandler{mockVessel, map[string]*result{}, &jsonMarshaler{}}
+	handler := newHTTPHandler(mockVessel)
 	w := httptest.NewRecorder()
 	payload := map[string]interface{}{
 		"id":      "abc",
@@ -91,7 +91,7 @@ func TestSendHandler(t *testing.T) {
 func TestPollHandlerNoMessage(t *testing.T) {
 	assert := assert.New(t)
 	mockVessel := new(mockVessel)
-	handler := &httpHandler{mockVessel, map[string]*result{}, &jsonMarshaler{}}
+	handler := newHTTPHandler(mockVessel)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "http://example.com/_vessel/message/abc", nil)
 
@@ -105,7 +105,7 @@ func TestPollHandlerNoMessage(t *testing.T) {
 func TestPollHandler(t *testing.T) {
 	assert := assert.New(t)
 	mockVessel := new(mockVessel)
-	handler := &httpHandler{mockVessel, map[string]*result{}, &jsonMarshaler{}}
+	handler := newHTTPHandler(mockVessel)
 	handler.results["abc"] = &result{
 		Done:      true,
 		Responses: []*message{&message{ID: "abc", Channel: "foo", Body: "bar"}},

@@ -20,15 +20,14 @@ type sockjsVessel struct {
 
 // NewSockJSVessel returns a new Vessel which relies on SockJS as the underlying transport.
 func NewSockJSVessel(uri string) Vessel {
-	marshaler := &jsonMarshaler{}
 	vessel := &sockjsVessel{
 		uri:         uri,
 		channels:    map[string]Channel{},
 		sessions:    []sockjs.Session{},
-		marshaler:   marshaler,
+		marshaler:   &jsonMarshaler{},
 		idGenerator: &uuidGenerator{},
 	}
-	httpHandler := &httpHandler{vessel, map[string]*result{}, &jsonMarshaler{}}
+	httpHandler := newHTTPHandler(vessel)
 	vessel.httpHandler = httpHandler
 	return vessel
 }
