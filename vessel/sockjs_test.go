@@ -107,11 +107,15 @@ func TestBroadcast(t *testing.T) {
 	session2.On("Send", `{"id":"abc","channel":"foo","body":"bar"}`).Return(nil)
 	idGenerator.On("generate").Return("abc")
 	vessel := NewSockJSVessel("http://localhost.com/foo")
+	mockPersister := new(mockPersister)
+	vessel.(*sockjsVessel).persister = mockPersister
 	vessel.(*sockjsVessel).idGenerator = idGenerator
 	vessel.(*sockjsVessel).sessions = append(vessel.(*sockjsVessel).sessions, session1, session2)
+	mockPersister.On("SaveMessage", "foo", &message{ID: "abc", Channel: "foo", Body: "bar"}).Return(nil)
 
 	vessel.Broadcast("foo", "bar")
 
 	session1.Mock.AssertExpectations(t)
 	session2.Mock.AssertExpectations(t)
+	mockPersister.Mock.AssertExpectations(t)
 }

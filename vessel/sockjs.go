@@ -20,22 +20,18 @@ type sockjsVessel struct {
 }
 
 // NewSockJSVessel returns a new Vessel which relies on SockJS as the underlying transport.
-func NewSockJSVessel(uri string) (Vessel, error) {
-	persister, err := NewPersister()
-	if err != nil {
-		return nil, err
-	}
+func NewSockJSVessel(uri string) Vessel {
 	vessel := &sockjsVessel{
 		uri:         uri,
 		channels:    map[string]Channel{},
 		sessions:    []sockjs.Session{},
 		marshaler:   &jsonMarshaler{},
 		idGenerator: &uuidGenerator{},
-		persister:   persister,
+		persister:   NewPersister(),
 	}
 	httpHandler := newHTTPHandler(vessel)
 	vessel.httpHandler = httpHandler
-	return vessel, nil
+	return vessel
 }
 
 // AddChannel registers the Channel handler with the specified name.
@@ -45,10 +41,15 @@ func (v *sockjsVessel) AddChannel(name string, channel Channel) {
 
 // Start will start the server on the given port.
 func (v *sockjsVessel) Start(sockPortStr, httpPortStr string) error {
+	if err := v.persister.Prepare(); err != nil {
+		return err
+	}
+
 	sockjsHandler := sockjs.NewHandler(v.uri, sockjs.DefaultOptions, v.handler())
 	r := mux.NewRouter()
-	r.HandleFunc("/_vessel", v.httpHandler.sendHandler).Methods("POST")
-	r.HandleFunc("/_vessel/message/{id}", v.httpHandler.pollHandler).Methods("GET")
+	r.HandleFunc("/_vessel", v.httpHandler.send).Methods("POST")
+	r.HandleFunc("/_vessel/message/{id}", v.httpHandler.pollResponses).Methods("GET")
+	r.HandleFunc("/_vessel/channel/{channel}", v.httpHandler.pollSubscription).Methods("GET")
 	http.Handle("/", &httpServer{r})
 	go func() {
 		http.ListenAndServe(httpPortStr, nil)
@@ -68,7 +69,7 @@ func (s *sockjsVessel) Broadcast(channel string, msg string) {
 		Body:    msg,
 	}
 
-	// TODO: these messages need to be made visible to HTTP pollers.
+	s.persister.SaveMessage(channel, m)
 	for _, session := range s.sessions {
 		if send, err := s.marshaler.marshal(m); err != nil {
 			log.Println(err)

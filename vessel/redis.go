@@ -8,35 +8,52 @@ import (
 )
 
 type redisPersister struct {
-	redis.Conn
-	sync.RWMutex
+	conn redis.Conn
+	mu   sync.RWMutex
 }
 
-func NewPersister() (Persister, error) {
+func NewPersister() Persister {
+	return &redisPersister{mu: sync.RWMutex{}}
+}
+
+func (r *redisPersister) Prepare() error {
 	c, err := redis.Dial("tcp", ":6379")
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &redisPersister{c, sync.RWMutex{}}, nil
+	r.conn = c
+	return nil
 }
 
-func (r *redisPersister) Persist(id string, result *result) error {
-	r.Lock()
-	defer r.Unlock()
+func (r *redisPersister) SaveResult(id string, result *result) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
 		return err
 	}
-	_, err = r.Do("SET", id, resultJSON)
+	_, err = r.conn.Do("SET", id, resultJSON)
 	return err
 }
 
-func (r *redisPersister) Get(id string) (*result, error) {
-	r.RLock()
-	defer r.RUnlock()
+func (r *redisPersister) SaveMessage(channel string, message *message) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	resultJSON, err := redis.String(r.Do("GET", id))
+	resultJSON, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	_, err = r.conn.Do("SADD", channel, resultJSON)
+	return err
+}
+
+func (r *redisPersister) GetResult(id string) (*result, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	resultJSON, err := redis.String(r.conn.Do("GET", id))
 	if err != nil {
 		return nil, err
 	}
@@ -47,4 +64,23 @@ func (r *redisPersister) Get(id string) (*result, error) {
 	}
 
 	return &result, nil
+}
+
+func (r *redisPersister) GetMessages(channel string) ([]*message, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	messages, err := redis.Strings(r.conn.Do("SMEMBERS", channel))
+	if err != nil {
+		return nil, err
+	}
+
+	m := make([]*message, len(messages))
+	for i, msg := range messages {
+		if err := json.Unmarshal([]byte(msg), &m[i]); err != nil {
+			return nil, err
+		}
+	}
+
+	return m, nil
 }

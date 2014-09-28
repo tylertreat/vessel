@@ -4,30 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
-
-type mockVessel struct {
-	mock.Mock
-}
-
-func (m *mockVessel) AddChannel(name string, channel Channel) {
-	m.Mock.Called(name, channel)
-}
-
-func (m *mockVessel) Start(sockPortStr, httpPortStr string) error {
-	args := m.Mock.Called(sockPortStr, httpPortStr)
-	return args.Error(0)
-}
-
-func (m *mockVessel) Recv(msg *message) (<-chan string, <-chan bool, error) {
-	args := m.Mock.Called(msg)
-	return args.Get(0).(<-chan string), args.Get(1).(<-chan bool), args.Error(2)
-}
-
-func (m *mockVessel) Broadcast(channel string, msg string) {
-	m.Mock.Called(channel, msg)
-}
 
 // Ensures that unmarshal returns nil and an error when the message is not valid JSON.
 func TestUnmarshalBadJSON(t *testing.T) {

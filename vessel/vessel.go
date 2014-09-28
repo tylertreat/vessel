@@ -34,8 +34,11 @@ type Vessel interface {
 }
 
 type Persister interface {
-	Persist(string, *result) error
-	Get(string) (*result, error)
+	Prepare() error
+	SaveResult(string, *result) error
+	SaveMessage(string, *message) error
+	GetResult(string) (*result, error)
+	GetMessages(string) ([]*message, error)
 }
 
 type message struct {

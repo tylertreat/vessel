@@ -46,7 +46,7 @@ func newHTTPHandler(vessel Vessel) *httpHandler {
 	}
 }
 
-func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
+func (h *httpHandler) send(w http.ResponseWriter, r *http.Request) {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(r.Body)
 
@@ -68,7 +68,7 @@ func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
 		Done:      false,
 		Responses: []*message{},
 	}
-	h.Persister().Persist(msg.ID, result)
+	h.Persister().SaveResult(msg.ID, result)
 
 	go h.dispatch(msg.ID, msg.Channel, results, done)
 
@@ -95,12 +95,13 @@ func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
-func (h *httpHandler) pollHandler(w http.ResponseWriter, r *http.Request) {
+func (h *httpHandler) pollResponses(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
-	result, err := h.Persister().Get(id)
+	result, err := h.Persister().GetResult(id)
 	if err != nil {
-		panic(err)
+		w.WriteHeader(http.StatusNotFound)
+		return
 	}
 
 	resp, err := json.Marshal(result)
@@ -114,9 +115,30 @@ func (h *httpHandler) pollHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+func (h *httpHandler) pollSubscription(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	channel := vars["channel"]
+	messages, err := h.Persister().GetMessages(channel)
+	if err != nil {
+		fmt.Println(err)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	resp, err := json.Marshal(messages)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
+}
+
 func (h *httpHandler) dispatch(id, channel string, results <-chan string, done <-chan bool) {
 	persister := h.Persister()
-	r, err := persister.Get(id)
+	r, err := persister.GetResult(id)
 	if err != nil {
 		log.Println(err)
 		return
@@ -126,14 +148,14 @@ func (h *httpHandler) dispatch(id, channel string, results <-chan string, done <
 		select {
 		case <-done:
 			r.Done = true
-			persister.Persist(id, r)
+			persister.SaveResult(id, r)
 		case result := <-results:
 			r.Responses = append(r.Responses, &message{
 				ID:      id,
 				Channel: channel,
 				Body:    result,
 			})
-			persister.Persist(id, r)
+			persister.SaveResult(id, r)
 		}
 	}
 }
