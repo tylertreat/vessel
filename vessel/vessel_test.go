@@ -35,17 +35,12 @@ func (m *mockVessel) Broadcast(channel string, msg string) {
 	m.Mock.Called(channel, msg)
 }
 
-func (m *mockVessel) Marshaler() Marshaler {
-	args := m.Mock.Called()
-	return args.Get(0).(Marshaler)
-}
-
 // Ensures that unmarshal returns nil and an error when the message is not valid JSON.
 func TestUnmarshalBadJSON(t *testing.T) {
 	assert := assert.New(t)
 	j := &jsonMarshaler{}
 
-	message, err := j.Unmarshal([]byte(`{"foo":}`))
+	message, err := j.unmarshal([]byte(`{"foo":}`))
 
 	assert.Nil(message)
 	assert.NotNil(err)
@@ -56,7 +51,7 @@ func TestUnmarshalMissingID(t *testing.T) {
 	assert := assert.New(t)
 	j := &jsonMarshaler{}
 
-	message, err := j.Unmarshal([]byte(`{"channel": "foo", "body": "bar"}`))
+	message, err := j.unmarshal([]byte(`{"channel": "foo", "body": "bar"}`))
 
 	assert.Nil(message)
 	assert.NotNil(err)
@@ -67,7 +62,7 @@ func TestUnmarshalMissingChannel(t *testing.T) {
 	assert := assert.New(t)
 	j := &jsonMarshaler{}
 
-	message, err := j.Unmarshal([]byte(`{"id": "foo", "body": "bar"}`))
+	message, err := j.unmarshal([]byte(`{"id": "foo", "body": "bar"}`))
 
 	assert.Nil(message)
 	assert.NotNil(err)
@@ -78,7 +73,7 @@ func TestUnmarshalMissingBody(t *testing.T) {
 	assert := assert.New(t)
 	j := &jsonMarshaler{}
 
-	message, err := j.Unmarshal([]byte(`{"id": "foo", "channel": "bar"}`))
+	message, err := j.unmarshal([]byte(`{"id": "foo", "channel": "bar"}`))
 
 	assert.Nil(message)
 	assert.NotNil(err)
@@ -89,7 +84,7 @@ func TestUnmarshalHappyPath(t *testing.T) {
 	assert := assert.New(t)
 	j := &jsonMarshaler{}
 
-	message, err := j.Unmarshal([]byte(`{"id": "abc", "channel": "foo", "body": "bar"}`))
+	message, err := j.unmarshal([]byte(`{"id": "abc", "channel": "foo", "body": "bar"}`))
 
 	if assert.NotNil(message) {
 		assert.Equal("abc", message.ID)
@@ -105,7 +100,7 @@ func TestMarshal(t *testing.T) {
 	j := &jsonMarshaler{}
 	message := &message{ID: "foo", Channel: "bar", Body: "baz"}
 
-	messageJSON, err := j.Marshal(message)
+	messageJSON, err := j.marshal(message)
 
 	assert.Equal(`{"id":"foo","channel":"bar","body":"baz"}`, string(messageJSON))
 	assert.Nil(err)

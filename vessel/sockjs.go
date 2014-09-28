@@ -13,7 +13,7 @@ type sockjsVessel struct {
 	uri         string
 	sessions    []sockjs.Session
 	channels    map[string]Channel
-	marshaler   Marshaler
+	marshaler   marshaler
 	idGenerator idGenerator
 	httpHandler *httpHandler
 }
@@ -51,10 +51,6 @@ func (v *sockjsVessel) Start(sockPortStr, httpPortStr string) error {
 	return http.ListenAndServe(sockPortStr, sockjsHandler)
 }
 
-func (v *sockjsVessel) Marshaler() Marshaler {
-	return v.marshaler
-}
-
 // Broadcast sends the specified message on the given channel to all connected clients.
 func (s *sockjsVessel) Broadcast(channel string, msg string) {
 	m := &message{
@@ -65,7 +61,7 @@ func (s *sockjsVessel) Broadcast(channel string, msg string) {
 
 	// TODO: these messages need to be made visible to HTTP pollers.
 	for _, session := range s.sessions {
-		if send, err := s.marshaler.Marshal(m); err != nil {
+		if send, err := s.marshaler.marshal(m); err != nil {
 			log.Println(err)
 		} else {
 			sendStr := string(send)
@@ -86,7 +82,7 @@ func (s *sockjsVessel) handler() func(sockjs.Session) {
 				break
 			}
 
-			recvMsg, err := s.marshaler.Unmarshal([]byte(msg))
+			recvMsg, err := s.marshaler.unmarshal([]byte(msg))
 			if err != nil {
 				log.Println(err)
 				continue
@@ -141,7 +137,7 @@ func (s *sockjsVessel) dispatchResponses(id, channel string, c <-chan string,
 				Channel: channel,
 				Body:    result,
 			}
-			if send, err := s.marshaler.Marshal(sendMsg); err != nil {
+			if send, err := s.marshaler.marshal(sendMsg); err != nil {
 				log.Println(err)
 			} else {
 				sendStr := string(send)

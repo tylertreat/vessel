@@ -28,8 +28,6 @@ type Vessel interface {
 
 	// Broadcast sends the specified message on the given channel to all connected clients.
 	Broadcast(string, string)
-
-	Marshaler() Marshaler
 }
 
 type message struct {
@@ -38,14 +36,14 @@ type message struct {
 	Body    string `json:"body"`
 }
 
-type Marshaler interface {
-	Unmarshal([]byte) (*message, error)
-	Marshal(*message) ([]byte, error)
+type marshaler interface {
+	unmarshal([]byte) (*message, error)
+	marshal(*message) ([]byte, error)
 }
 
 type jsonMarshaler struct{}
 
-func (j *jsonMarshaler) Unmarshal(msg []byte) (*message, error) {
+func (j *jsonMarshaler) unmarshal(msg []byte) (*message, error) {
 	var payload map[string]interface{}
 	if err := json.Unmarshal(msg, &payload); err != nil {
 		return nil, err
@@ -75,7 +73,7 @@ func (j *jsonMarshaler) Unmarshal(msg []byte) (*message, error) {
 	return message, nil
 }
 
-func (j *jsonMarshaler) Marshal(message *message) ([]byte, error) {
+func (j *jsonMarshaler) marshal(message *message) ([]byte, error) {
 	return json.Marshal(message)
 }
 
@@ -117,14 +115,14 @@ type result struct {
 type httpHandler struct {
 	Vessel
 	results   map[string]*result
-	marshaler Marshaler
+	marshaler marshaler
 }
 
 func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(r.Body)
 
-	msg, err := h.marshaler.Unmarshal(buf.Bytes())
+	msg, err := h.marshaler.unmarshal(buf.Bytes())
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
