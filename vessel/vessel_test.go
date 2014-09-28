@@ -182,7 +182,7 @@ func TestSendHandler(t *testing.T) {
 	result := handler.results["abc"]
 	if assert.NotNil(result) {
 		assert.False(result.Done)
-		assert.Equal([]*message{}, result.Results)
+		assert.Equal([]*message{}, result.Responses)
 	}
 }
 
@@ -206,8 +206,8 @@ func TestPollHandler(t *testing.T) {
 	mockVessel := new(mockVessel)
 	handler := &httpHandler{mockVessel, map[string]*result{}, &jsonMarshaler{}}
 	handler.results["abc"] = &result{
-		Done:    true,
-		Results: []*message{&message{ID: "abc", Channel: "foo", Body: "bar"}},
+		Done:      true,
+		Responses: []*message{&message{ID: "abc", Channel: "foo", Body: "bar"}},
 	}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "http://example.com/_vessel/message/abc", nil)
@@ -216,7 +216,7 @@ func TestPollHandler(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(http.StatusOK, w.Code)
-	assert.Equal(`{"done":true,"results":[{"id":"abc","channel":"foo","body":"bar"}]}`, w.Body.String())
+	assert.Equal(`{"done":true,"responses":[{"id":"abc","channel":"foo","body":"bar"}]}`, w.Body.String())
 }
 
 func router(handler http.HandlerFunc) *mux.Router {

@@ -110,8 +110,8 @@ func (h *httpServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 }
 
 type result struct {
-	Done    bool       `json:"done"`
-	Results []*message `json:"results"`
+	Done      bool       `json:"done"`
+	Responses []*message `json:"responses"`
 }
 
 type httpHandler struct {
@@ -140,8 +140,8 @@ func (h *httpHandler) sendHandler(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: Look into pluggable persistence.
 	h.results[msg.ID] = &result{
-		Done:    false,
-		Results: []*message{},
+		Done:      false,
+		Responses: []*message{},
 	}
 
 	go h.dispatch(msg.ID, msg.Channel, results, done)
@@ -196,7 +196,7 @@ func (h *httpHandler) dispatch(id, channel string, results <-chan string, done <
 		case <-done:
 			r.Done = true
 		case result := <-results:
-			r.Results = append(r.Results, &message{
+			r.Responses = append(r.Responses, &message{
 				ID:      id,
 				Channel: channel,
 				Body:    result,
