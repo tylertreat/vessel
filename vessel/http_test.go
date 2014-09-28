@@ -24,7 +24,7 @@ func TestSendHandlerBadRequest(t *testing.T) {
 	}
 	jsonPayload, _ := json.Marshal(payload)
 	reader := bytes.NewReader(jsonPayload)
-	req, _ := http.NewRequest("POST", "http://example.com/_vessel", reader)
+	req, _ := http.NewRequest("POST", "http://example.com/vessel", reader)
 
 	handler.sendHandler(w, req)
 
@@ -45,7 +45,7 @@ func TestSendHandlerRecvFail(t *testing.T) {
 	}
 	jsonPayload, _ := json.Marshal(payload)
 	reader := bytes.NewReader(jsonPayload)
-	req, _ := http.NewRequest("POST", "http://example.com/_vessel", reader)
+	req, _ := http.NewRequest("POST", "http://example.com/vessel", reader)
 	mockVessel.On("Recv", &message{ID: "abc", Channel: "foo", Body: "bar"}).
 		Return(make(<-chan string), make(<-chan bool), fmt.Errorf("error"))
 
@@ -69,16 +69,17 @@ func TestSendHandler(t *testing.T) {
 	}
 	jsonPayload, _ := json.Marshal(payload)
 	reader := bytes.NewReader(jsonPayload)
-	req, _ := http.NewRequest("POST", "http://example.com/_vessel", reader)
+	req, _ := http.NewRequest("POST", "http://example.com/vessel", reader)
 	mockVessel.On("Recv", &message{ID: "abc", Channel: "foo", Body: "bar"}).
 		Return(make(<-chan string), make(<-chan bool), nil)
+	mockVessel.On("URI").Return("/vessel")
 
 	handler.sendHandler(w, req)
 
 	mockVessel.Mock.AssertExpectations(t)
 	assert.Equal(http.StatusAccepted, w.Code)
 	assert.Equal(
-		`{"channel":"foo","id":"abc","responses":"http://example.com/_vessel/message/abc"}`,
+		`{"channel":"foo","id":"abc","responses":"http://example.com/vessel/message/abc"}`,
 		w.Body.String())
 	result := handler.results["abc"]
 	if assert.NotNil(result) {
@@ -93,7 +94,7 @@ func TestPollHandlerNoMessage(t *testing.T) {
 	mockVessel := new(mockVessel)
 	handler := newHTTPHandler(mockVessel)
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "http://example.com/_vessel/message/abc", nil)
+	req, _ := http.NewRequest("GET", "http://example.com/vessel/message/abc", nil)
 
 	handler.pollHandler(w, req)
 
@@ -111,7 +112,7 @@ func TestPollHandler(t *testing.T) {
 		Responses: []*message{&message{ID: "abc", Channel: "foo", Body: "bar"}},
 	}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "http://example.com/_vessel/message/abc", nil)
+	req, _ := http.NewRequest("GET", "http://example.com/vessel/message/abc", nil)
 	r := router(handler.pollHandler)
 
 	r.ServeHTTP(w, req)
@@ -122,6 +123,6 @@ func TestPollHandler(t *testing.T) {
 
 func router(handler http.HandlerFunc) *mux.Router {
 	r := mux.NewRouter()
-	r.HandleFunc("/_vessel/message/{id}", handler)
+	r.HandleFunc("/vessel/message/{id}", handler)
 	return r
 }

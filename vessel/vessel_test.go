@@ -29,6 +29,11 @@ func (m *mockVessel) Broadcast(channel string, msg string) {
 	m.Mock.Called(channel, msg)
 }
 
+func (m *mockVessel) URI() string {
+	args := m.Mock.Called()
+	return args.String(0)
+}
+
 // Ensures that unmarshal returns nil and an error when the message is not valid JSON.
 func TestUnmarshalBadJSON(t *testing.T) {
 	assert := assert.New(t)

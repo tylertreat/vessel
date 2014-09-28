@@ -28,6 +28,9 @@ type Vessel interface {
 
 	// Broadcast sends the specified message on the given channel to all connected clients.
 	Broadcast(string, string)
+
+	// URI returns the registered URI for this Vessel.
+	URI() string
 }
 
 type message struct {
