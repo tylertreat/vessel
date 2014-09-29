@@ -41,6 +41,15 @@ func (m *mockIDGenerator) generate() string {
 	return args.String(0)
 }
 
+func mockMessageGenerator(id, channel, msg string) *message {
+	return &message{
+		ID:        id,
+		Channel:   channel,
+		Body:      msg,
+		Timestamp: 1412003438,
+	}
+}
+
 func newChannel(t *testing.T, expected bool) Channel {
 	return func(name string, result chan<- string, done chan<- bool) {
 		result <- "foo"
@@ -103,15 +112,21 @@ func TestBroadcast(t *testing.T) {
 	session1 := new(mockSession)
 	session2 := new(mockSession)
 	idGenerator := new(mockIDGenerator)
-	session1.On("Send", `{"id":"abc","channel":"foo","body":"bar"}`).Return(nil)
-	session2.On("Send", `{"id":"abc","channel":"foo","body":"bar"}`).Return(nil)
+	session1.On("Send", `{"id":"abc","channel":"foo","body":"bar","timestamp":1412003438}`).Return(nil)
+	session2.On("Send", `{"id":"abc","channel":"foo","body":"bar","timestamp":1412003438}`).Return(nil)
 	idGenerator.On("generate").Return("abc")
 	vessel := NewSockJSVessel("http://localhost.com/foo")
 	mockPersister := new(mockPersister)
 	vessel.(*sockjsVessel).persister = mockPersister
 	vessel.(*sockjsVessel).idGenerator = idGenerator
+	vessel.(*sockjsVessel).messageGenerator = mockMessageGenerator
 	vessel.(*sockjsVessel).sessions = append(vessel.(*sockjsVessel).sessions, session1, session2)
-	mockPersister.On("SaveMessage", "foo", &message{ID: "abc", Channel: "foo", Body: "bar"}).Return(nil)
+	mockPersister.On("SaveMessage", "foo", &message{
+		ID:        "abc",
+		Channel:   "foo",
+		Body:      "bar",
+		Timestamp: 1412003438,
+	}).Return(nil)
 
 	vessel.Broadcast("foo", "bar")
 

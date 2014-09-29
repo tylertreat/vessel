@@ -10,24 +10,26 @@ import (
 )
 
 type sockjsVessel struct {
-	uri         string
-	sessions    []sockjs.Session
-	channels    map[string]Channel
-	marshaler   marshaler
-	idGenerator idGenerator
-	httpHandler *httpHandler
-	persister   Persister
+	uri              string
+	sessions         []sockjs.Session
+	channels         map[string]Channel
+	marshaler        marshaler
+	idGenerator      idGenerator
+	messageGenerator messageGenerator
+	httpHandler      *httpHandler
+	persister        Persister
 }
 
 // NewSockJSVessel returns a new Vessel which relies on SockJS as the underlying transport.
 func NewSockJSVessel(uri string) Vessel {
 	vessel := &sockjsVessel{
-		uri:         uri,
-		channels:    map[string]Channel{},
-		sessions:    []sockjs.Session{},
-		marshaler:   &jsonMarshaler{},
-		idGenerator: &uuidGenerator{},
-		persister:   NewPersister(),
+		uri:              uri,
+		channels:         map[string]Channel{},
+		sessions:         []sockjs.Session{},
+		marshaler:        &jsonMarshaler{},
+		idGenerator:      &uuidGenerator{},
+		messageGenerator: newMessage,
+		persister:        NewPersister(),
 	}
 	httpHandler := newHTTPHandler(vessel)
 	vessel.httpHandler = httpHandler
@@ -69,11 +71,7 @@ func (v *sockjsVessel) URI() string {
 
 // Broadcast sends the specified message on the given channel to all connected clients.
 func (s *sockjsVessel) Broadcast(channel string, msg string) {
-	m := &message{
-		ID:      s.idGenerator.generate(),
-		Channel: channel,
-		Body:    msg,
-	}
+	m := s.messageGenerator(s.idGenerator.generate(), channel, msg)
 
 	s.persister.SaveMessage(channel, m)
 	for _, session := range s.sessions {
@@ -151,11 +149,7 @@ func (s *sockjsVessel) dispatchResponses(id, channel string, c <-chan string,
 		case <-done:
 			return
 		case result := <-c:
-			sendMsg := &message{
-				ID:      id,
-				Channel: channel,
-				Body:    result,
-			}
+			sendMsg := newMessage(id, channel, result)
 			if send, err := s.marshaler.marshal(sendMsg); err != nil {
 				log.Println(err)
 			} else {

@@ -77,14 +77,15 @@ func TestSendRecvFail(t *testing.T) {
 	handler := newHTTPHandler(mockVessel)
 	w := httptest.NewRecorder()
 	payload := map[string]interface{}{
-		"id":      "abc",
-		"channel": "foo",
-		"body":    "bar",
+		"id":        "abc",
+		"channel":   "foo",
+		"body":      "bar",
+		"timestamp": 1412003438,
 	}
 	jsonPayload, _ := json.Marshal(payload)
 	reader := bytes.NewReader(jsonPayload)
 	req, _ := http.NewRequest("POST", "http://example.com/vessel", reader)
-	mockVessel.On("Recv", &message{ID: "abc", Channel: "foo", Body: "bar"}).
+	mockVessel.On("Recv", &message{ID: "abc", Channel: "foo", Body: "bar", Timestamp: 1412003438}).
 		Return(make(<-chan string), make(<-chan bool), fmt.Errorf("error"))
 
 	handler.send(w, req)
@@ -102,14 +103,15 @@ func TestSend(t *testing.T) {
 	handler := newHTTPHandler(mockVessel)
 	w := httptest.NewRecorder()
 	payload := map[string]interface{}{
-		"id":      "abc",
-		"channel": "foo",
-		"body":    "bar",
+		"id":        "abc",
+		"channel":   "foo",
+		"body":      "bar",
+		"timestamp": 1412003438,
 	}
 	jsonPayload, _ := json.Marshal(payload)
 	reader := bytes.NewReader(jsonPayload)
 	req, _ := http.NewRequest("POST", "http://example.com/vessel", reader)
-	mockVessel.On("Recv", &message{ID: "abc", Channel: "foo", Body: "bar"}).
+	mockVessel.On("Recv", &message{ID: "abc", Channel: "foo", Body: "bar", Timestamp: 1412003438}).
 		Return(make(<-chan string), make(<-chan bool), nil)
 	mockVessel.On("Persister").Return(mockPersister)
 	result := &result{Done: false, Responses: []*message{}}
@@ -156,14 +158,17 @@ func TestPollHandler(t *testing.T) {
 	mockVessel.On("Persister").Return(mockPersister)
 	result := &result{
 		Done:      true,
-		Responses: []*message{&message{ID: "abc", Channel: "foo", Body: "bar"}},
+		Responses: []*message{&message{ID: "abc", Channel: "foo", Body: "bar", Timestamp: 1412003438}},
 	}
 	mockPersister.On("GetResult", "abc").Return(result, nil)
 
 	r.ServeHTTP(w, req)
 
 	assert.Equal(http.StatusOK, w.Code)
-	assert.Equal(`{"done":true,"responses":[{"id":"abc","channel":"foo","body":"bar"}]}`, w.Body.String())
+	assert.Equal(
+		`{"done":true,"responses":[{"id":"abc","channel":"foo","body":"bar","timestamp":1412003438}]}`,
+		w.Body.String(),
+	)
 }
 
 func router(handler http.HandlerFunc) *mux.Router {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/mattrobenolt/gocql/uuid"
 )
@@ -45,9 +46,21 @@ type Persister interface {
 }
 
 type message struct {
-	ID      string `json:"id"`
-	Channel string `json:"channel"`
-	Body    string `json:"body"`
+	ID        string `json:"id"`
+	Channel   string `json:"channel"`
+	Body      string `json:"body"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+type messageGenerator func(string, string, string) *message
+
+func newMessage(id, channel, body string) *message {
+	return &message{
+		ID:        id,
+		Channel:   channel,
+		Body:      body,
+		Timestamp: time.Now().Unix(),
+	}
 }
 
 type marshaler interface {
@@ -78,10 +91,16 @@ func (j *jsonMarshaler) unmarshal(msg []byte) (*message, error) {
 		return nil, fmt.Errorf("Message missing body")
 	}
 
+	timestamp, ok := payload["timestamp"]
+	if !ok {
+		return nil, fmt.Errorf("Message missing timestamp")
+	}
+
 	message := &message{
-		ID:      id.(string),
-		Channel: channel.(string),
-		Body:    body.(string),
+		ID:        id.(string),
+		Channel:   channel.(string),
+		Body:      body.(string),
+		Timestamp: int64(timestamp.(float64)),
 	}
 
 	return message, nil

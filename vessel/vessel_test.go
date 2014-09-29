@@ -83,12 +83,24 @@ func TestUnmarshalMissingBody(t *testing.T) {
 	assert.NotNil(err)
 }
 
+// Ensures that unmarshal returns nil and an error when the message is missing a timestamp.
+func TestUnmarshalMissingTimestamp(t *testing.T) {
+	assert := assert.New(t)
+	j := &jsonMarshaler{}
+
+	message, err := j.unmarshal([]byte(`{"id": "abc", "channel": "foo", "body": "bar"}`))
+
+	assert.Nil(message)
+	assert.NotNil(err)
+}
+
 // Ensures that unmarshal returns the expected message when valid JSON is provided.
 func TestUnmarshalHappyPath(t *testing.T) {
 	assert := assert.New(t)
 	j := &jsonMarshaler{}
 
-	message, err := j.unmarshal([]byte(`{"id": "abc", "channel": "foo", "body": "bar"}`))
+	message, err := j.unmarshal(
+		[]byte(`{"id": "abc", "channel": "foo", "body": "bar", "timestamp": 1412003438}`))
 
 	if assert.NotNil(message) {
 		assert.Equal("abc", message.ID)
@@ -102,10 +114,11 @@ func TestUnmarshalHappyPath(t *testing.T) {
 func TestMarshal(t *testing.T) {
 	assert := assert.New(t)
 	j := &jsonMarshaler{}
-	message := &message{ID: "foo", Channel: "bar", Body: "baz"}
+	message := &message{ID: "foo", Channel: "bar", Body: "baz", Timestamp: 1412003438}
 
 	messageJSON, err := j.marshal(message)
 
-	assert.Equal(`{"id":"foo","channel":"bar","body":"baz"}`, string(messageJSON))
+	assert.Equal(`{"id":"foo","channel":"bar","body":"baz","timestamp":1412003438}`,
+		string(messageJSON))
 	assert.Nil(err)
 }

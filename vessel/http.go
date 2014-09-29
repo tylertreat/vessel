@@ -150,11 +150,7 @@ func (h *httpHandler) dispatch(id, channel string, results <-chan string, done <
 			r.Done = true
 			persister.SaveResult(id, r)
 		case result := <-results:
-			r.Responses = append(r.Responses, &message{
-				ID:      id,
-				Channel: channel,
-				Body:    result,
-			})
+			r.Responses = append(r.Responses, newMessage(id, channel, result))
 			persister.SaveResult(id, r)
 		}
 	}
