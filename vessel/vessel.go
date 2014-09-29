@@ -42,7 +42,7 @@ type Persister interface {
 	SaveResult(string, *result) error
 	SaveMessage(string, *message) error
 	GetResult(string) (*result, error)
-	GetMessages(string) ([]*message, error)
+	GetMessages(string, int64) ([]*message, error)
 }
 
 type message struct {

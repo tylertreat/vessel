@@ -41,8 +41,8 @@ func (m *mockPersister) GetResult(id string) (*result, error) {
 	return nil, args.Error(1)
 }
 
-func (m *mockPersister) GetMessages(channel string) ([]*message, error) {
-	args := m.Mock.Called(channel)
+func (m *mockPersister) GetMessages(channel string, since int64) ([]*message, error) {
+	args := m.Mock.Called(channel, since)
 	messages := args.Get(0)
 	if messages != nil {
 		return messages.([]*message), args.Error(1)

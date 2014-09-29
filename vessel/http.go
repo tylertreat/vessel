@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
@@ -46,6 +47,9 @@ func newHTTPHandler(vessel Vessel) *httpHandler {
 	}
 }
 
+// send allows HTTP clients to send messages into the system. It calls Recv on
+// messages to invoke channel handlers and begins dispatching responses.
+// Responses can be polled using the pollResponses handler.
 func (h *httpHandler) send(w http.ResponseWriter, r *http.Request) {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(r.Body)
@@ -95,6 +99,8 @@ func (h *httpHandler) send(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+// pollResponses will return any responses messages for the message with the
+// given id.
 func (h *httpHandler) pollResponses(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
@@ -115,10 +121,24 @@ func (h *httpHandler) pollResponses(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+// pollSubscriptions will return all messages on a channel since the provided
+// timestamp.
 func (h *httpHandler) pollSubscription(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	channel := vars["channel"]
-	messages, err := h.Persister().GetMessages(channel)
+	var since int64
+	if sinceStr, ok := r.URL.Query()["since"]; ok {
+		var err error
+		since, err = strconv.ParseInt(sinceStr[0], 0, 64)
+		if err != nil {
+			fmt.Println(err)
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+	}
+
+	messages, err := h.Persister().GetMessages(channel, since)
 	if err != nil {
 		fmt.Println(err)
 		w.WriteHeader(http.StatusNotFound)
@@ -136,6 +156,8 @@ func (h *httpHandler) pollSubscription(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+// dispatch will listen for responses to a message and add them to the message
+// result struct for polling.
 func (h *httpHandler) dispatch(id, channel string, results <-chan string, done <-chan bool) {
 	persister := h.Persister()
 	r, err := persister.GetResult(id)

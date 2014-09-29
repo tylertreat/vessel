@@ -2,6 +2,7 @@ package vessel
 
 import (
 	"encoding/json"
+	"strconv"
 	"sync"
 
 	"github.com/garyburd/redigo/redis"
@@ -45,7 +46,7 @@ func (r *redisPersister) SaveMessage(channel string, message *message) error {
 	if err != nil {
 		return err
 	}
-	_, err = r.conn.Do("SADD", channel, resultJSON)
+	_, err = r.conn.Do("ZADD", channel, message.Timestamp, resultJSON)
 	return err
 }
 
@@ -66,11 +67,13 @@ func (r *redisPersister) GetResult(id string) (*result, error) {
 	return &result, nil
 }
 
-func (r *redisPersister) GetMessages(channel string) ([]*message, error) {
+func (r *redisPersister) GetMessages(channel string, since int64) ([]*message, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	messages, err := redis.Strings(r.conn.Do("SMEMBERS", channel))
+	min := "(" + strconv.FormatInt(since, 10)
+	max := "+inf"
+	messages, err := redis.Strings(r.conn.Do("ZRANGEBYSCORE", channel, min, max))
 	if err != nil {
 		return nil, err
 	}

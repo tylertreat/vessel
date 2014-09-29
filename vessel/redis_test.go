@@ -76,15 +76,15 @@ func TestSaveResultError(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
-// Ensures that SaveMessage performs a SADD operation on redis and returns nil
+// Ensures that SaveMessage performs a ZADD operation on redis and returns nil
 // on success.
 func TestSaveMessage(t *testing.T) {
 	mockConn := new(mockConn)
 	r := &redisPersister{mu: sync.RWMutex{}, conn: mockConn}
-	message := &message{ID: "abc", Channel: "foo", Body: "bar"}
+	message := &message{ID: "abc", Channel: "foo", Body: "bar", Timestamp: 1412006603}
 	messageJSON, _ := json.Marshal(message)
-	args := []interface{}{"foo", messageJSON}
-	mockConn.On("Do", "SADD", args).Return(nil, nil)
+	args := []interface{}{"foo", 1412006603, messageJSON}
+	mockConn.On("Do", "ZADD", args).Return(nil, nil)
 
 	err := r.SaveMessage("foo", message)
 
@@ -92,15 +92,15 @@ func TestSaveMessage(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-// Ensures that SaveMessage performs a SADD operation on redis and returns an
+// Ensures that SaveMessage performs a ZADD operation on redis and returns an
 // error on fail.
 func TestSaveMessageError(t *testing.T) {
 	mockConn := new(mockConn)
 	r := &redisPersister{mu: sync.RWMutex{}, conn: mockConn}
-	message := &message{ID: "abc", Channel: "foo", Body: "bar"}
+	message := &message{ID: "abc", Channel: "foo", Body: "bar", Timestamp: 1412006603}
 	messageJSON, _ := json.Marshal(message)
-	args := []interface{}{"foo", messageJSON}
-	mockConn.On("Do", "SADD", args).Return(nil, fmt.Errorf("error"))
+	args := []interface{}{"foo", 1412006603, messageJSON}
+	mockConn.On("Do", "ZADD", args).Return(nil, fmt.Errorf("error"))
 
 	err := r.SaveMessage("foo", message)
 
@@ -143,18 +143,18 @@ func GetResultError(t *testing.T) {
 	assert.NotNil(err)
 }
 
-// Ensures that GetMessages performs a SMEMBERS operation on redis and returns
-// the result.
+// Ensures that GetMessages performs a ZRANGEBYSCORE operation on redis and
+// returns the result.
 func GetMessages(t *testing.T) {
 	assert := assert.New(t)
 	mockConn := new(mockConn)
 	r := &redisPersister{mu: sync.RWMutex{}, conn: mockConn}
 	var res interface{}
-	msgJSON, _ := json.Marshal(&message{ID: "abc", Channel: "foo", Body: "bar"})
+	msgJSON, _ := json.Marshal(&message{ID: "abc", Channel: "foo", Body: "bar", Timestamp: 1412006603})
 	res = [][]byte{msgJSON}
-	mockConn.On("Do", "SMEMBERS", "foo").Return(res, nil)
+	mockConn.On("Do", "ZRANGEBYSCORE", "foo", "(1412006600", "+inf").Return(res, nil)
 
-	messages, err := r.GetMessages("foo")
+	messages, err := r.GetMessages("foo", 1412006600)
 
 	mockConn.Mock.AssertExpectations(t)
 	if assert.NotNil(messages) {
@@ -162,19 +162,20 @@ func GetMessages(t *testing.T) {
 		assert.Equal("abc", messages[0].ID)
 		assert.Equal("foo", messages[0].Channel)
 		assert.Equal("bar", messages[0].Body)
+		assert.Equal(1412006603, messages[0].Timestamp)
 	}
 	assert.Nil(err)
 }
 
-// Ensures that GetMessages performs a SMEMBERS operation on redis and returns
-// an error on fail.
+// Ensures that GetMessages performs a ZRANGEBYSCORE operation on redis and
+// returns an error on fail.
 func GetMessagesError(t *testing.T) {
 	assert := assert.New(t)
 	mockConn := new(mockConn)
 	r := &redisPersister{mu: sync.RWMutex{}, conn: mockConn}
-	mockConn.On("Do", "SMEMBERS", "foo").Return(nil, fmt.Errorf("error"))
+	mockConn.On("Do", "ZRANGEBYSCORE", "(1412006600", "+inf").Return(nil, fmt.Errorf("error"))
 
-	messages, err := r.GetMessages("foo")
+	messages, err := r.GetMessages("foo", 1412006600)
 
 	mockConn.Mock.AssertExpectations(t)
 	assert.Nil(messages)
