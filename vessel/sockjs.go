@@ -27,7 +27,7 @@ func NewSockJSVessel(uri string) Vessel {
 		channels:         map[string]Channel{},
 		sessions:         []sockjs.Session{},
 		marshaler:        &jsonMarshaler{},
-		idGenerator:      &uuidGenerator{},
+		idGenerator:      newUUID,
 		messageGenerator: newMessage,
 		persister:        NewPersister(),
 	}
@@ -71,7 +71,7 @@ func (v *sockjsVessel) URI() string {
 
 // Broadcast sends the specified message on the given channel to all connected clients.
 func (s *sockjsVessel) Broadcast(channel string, msg string) {
-	m := s.messageGenerator(s.idGenerator.generate(), channel, msg)
+	m := s.messageGenerator(s.idGenerator(), channel, msg)
 
 	s.persister.SaveMessage(channel, m)
 	for _, session := range s.sessions {

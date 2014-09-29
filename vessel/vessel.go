@@ -63,6 +63,13 @@ func newMessage(id, channel, body string) *message {
 	}
 }
 
+type idGenerator func() string
+
+func newUUID() string {
+	uuid := uuid.RandomUUID().String()
+	return strings.Replace(uuid, "-", "", -1)
+}
+
 type marshaler interface {
 	unmarshal([]byte) (*message, error)
 	marshal(*message) ([]byte, error)
@@ -108,15 +115,4 @@ func (j *jsonMarshaler) unmarshal(msg []byte) (*message, error) {
 
 func (j *jsonMarshaler) marshal(message *message) ([]byte, error) {
 	return json.Marshal(message)
-}
-
-type idGenerator interface {
-	generate() string
-}
-
-type uuidGenerator struct{}
-
-func (u *uuidGenerator) generate() string {
-	uuid := uuid.RandomUUID().String()
-	return strings.Replace(uuid, "-", "", -1)
 }
