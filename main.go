@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	vessel := vessel.NewSockJSVessel("/vessel")
+	vessel := vessel.NewVessel("/_vessel")
 
 	vessel.AddChannel("foo", func(msg string, c chan<- string, done chan<- bool) {
 		for x := 0; x < 10; x++ {
@@ -23,9 +23,9 @@ func main() {
 		c := time.Tick(5 * time.Second)
 		for {
 			<-c
-			vessel.Broadcast("baz", "testing 123")
+			vessel.Publish("baz", "testing 123")
 		}
 	}()
 
-	vessel.Start(":8081", ":8082")
+	vessel.Start(map[string]string{"sockjs": ":8081", "http": ":8082"})
 }

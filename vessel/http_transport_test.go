@@ -53,8 +53,9 @@ func (m *mockPersister) GetMessages(channel string, since int64) ([]*message, er
 // Ensures that send writes an error message when the payload is bad.
 func TestSendBadRequest(t *testing.T) {
 	assert := assert.New(t)
-	mockVessel := new(mockVessel)
-	handler := newHTTPHandler(mockVessel)
+	mockPersister := new(mockPersister)
+	messages := make(chan *messageContext)
+	transport := newHTTPTransport("/_vessel", messages, mockPersister)
 	w := httptest.NewRecorder()
 	payload := map[string]interface{}{
 		"channel": "foo",
@@ -64,43 +65,18 @@ func TestSendBadRequest(t *testing.T) {
 	reader := bytes.NewReader(jsonPayload)
 	req, _ := http.NewRequest("POST", "http://example.com/vessel", reader)
 
-	handler.send(w, req)
+	transport.(*httpTransport).send(w, req)
 
 	assert.Equal(http.StatusBadRequest, w.Code)
 	assert.Equal("Message missing id", w.Body.String())
 }
 
-// Ensures that send writes an error message when Recv fails.
-func TestSendRecvFail(t *testing.T) {
-	assert := assert.New(t)
-	mockVessel := new(mockVessel)
-	handler := newHTTPHandler(mockVessel)
-	w := httptest.NewRecorder()
-	payload := map[string]interface{}{
-		"id":        "abc",
-		"channel":   "foo",
-		"body":      "bar",
-		"timestamp": 1412003438,
-	}
-	jsonPayload, _ := json.Marshal(payload)
-	reader := bytes.NewReader(jsonPayload)
-	req, _ := http.NewRequest("POST", "http://example.com/vessel", reader)
-	mockVessel.On("Recv", &message{ID: "abc", Channel: "foo", Body: "bar", Timestamp: 1412003438}).
-		Return(make(<-chan string), make(<-chan bool), fmt.Errorf("error"))
-
-	handler.send(w, req)
-
-	mockVessel.Mock.AssertExpectations(t)
-	assert.Equal(http.StatusInternalServerError, w.Code)
-	assert.Equal("error", w.Body.String())
-}
-
 // Ensures that send dispatches the message and writes the resource URL.
 func TestSend(t *testing.T) {
 	assert := assert.New(t)
-	mockVessel := new(mockVessel)
 	mockPersister := new(mockPersister)
-	handler := newHTTPHandler(mockVessel)
+	messages := make(chan *messageContext, 1)
+	transport := newHTTPTransport("/_vessel", messages, mockPersister)
 	w := httptest.NewRecorder()
 	payload := map[string]interface{}{
 		"id":        "abc",
@@ -110,34 +86,32 @@ func TestSend(t *testing.T) {
 	}
 	jsonPayload, _ := json.Marshal(payload)
 	reader := bytes.NewReader(jsonPayload)
-	req, _ := http.NewRequest("POST", "http://example.com/vessel", reader)
-	mockVessel.On("Recv", &message{ID: "abc", Channel: "foo", Body: "bar", Timestamp: 1412003438}).
-		Return(make(<-chan string), make(<-chan bool), nil)
-	mockVessel.On("Persister").Return(mockPersister)
+	req, _ := http.NewRequest("POST", "http://example.com/_vessel", reader)
 	result := &result{Done: false, Responses: []*message{}}
 	mockPersister.On("SaveResult", "abc", result).Return(nil)
-	mockPersister.On("GetResult", "abc").Return(nil, fmt.Errorf("error"))
-	mockVessel.On("URI").Return("/vessel")
 
-	handler.send(w, req)
+	transport.(*httpTransport).send(w, req)
 
-	mockVessel.Mock.AssertExpectations(t)
+	msgCtx := <-messages
+	msg := msgCtx.message
+	assert.Equal("abc", msg.ID)
+	assert.Equal("foo", msg.Channel)
+	assert.Equal("bar", msg.Body)
+	assert.Equal(1412003438, msg.Timestamp)
 	assert.Equal(http.StatusAccepted, w.Code)
 	assert.Equal(
-		`{"channel":"foo","id":"abc","responses":"http://example.com/vessel/message/abc"}`,
+		`{"channel":"foo","id":"abc","responses":"http://example.com/_vessel/message/abc"}`,
 		w.Body.String())
 }
 
 // Ensures that pollResponses writes an error message when there is no message.
 func TestPollResponsesNoMessage(t *testing.T) {
 	assert := assert.New(t)
-	mockVessel := new(mockVessel)
 	mockPersister := new(mockPersister)
-	handler := newHTTPHandler(mockVessel)
+	transport := newHTTPTransport("/_vessel", make(chan *messageContext), mockPersister)
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "http://example.com/vessel/message/abc", nil)
-	r := router(handler.pollResponses)
-	mockVessel.On("Persister").Return(mockPersister)
+	req, _ := http.NewRequest("GET", "http://example.com/_vessel/message/abc", nil)
+	r := router(transport.(*httpTransport).pollResponses)
 	mockPersister.On("GetResult", "abc").Return(nil, fmt.Errorf("no result"))
 
 	r.ServeHTTP(w, req)
@@ -149,13 +123,11 @@ func TestPollResponsesNoMessage(t *testing.T) {
 // Ensures that pollResponses returns a JSON payload containing the message responses.
 func TestPollHandler(t *testing.T) {
 	assert := assert.New(t)
-	mockVessel := new(mockVessel)
 	mockPersister := new(mockPersister)
-	handler := newHTTPHandler(mockVessel)
+	transport := newHTTPTransport("/_vessel", make(chan *messageContext), mockPersister)
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "http://example.com/vessel/message/abc", nil)
-	r := router(handler.pollResponses)
-	mockVessel.On("Persister").Return(mockPersister)
+	req, _ := http.NewRequest("GET", "http://example.com/_vessel/message/abc", nil)
+	r := router(transport.(*httpTransport).pollResponses)
 	result := &result{
 		Done:      true,
 		Responses: []*message{&message{ID: "abc", Channel: "foo", Body: "bar", Timestamp: 1412003438}},
@@ -173,6 +145,6 @@ func TestPollHandler(t *testing.T) {
 
 func router(handler http.HandlerFunc) *mux.Router {
 	r := mux.NewRouter()
-	r.HandleFunc("/vessel/message/{id}", handler)
+	r.HandleFunc("/_vessel/message/{id}", handler)
 	return r
 }
